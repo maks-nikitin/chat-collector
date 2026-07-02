@@ -1,0 +1,42 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: chat-collector-backend
+    env_file:
+      - .env
+    environment:
+      - SESSIONS_DIR=/app/sessions
+      - MEDIA_DIR=/app/media
+    volumes:
+      - ./backend/sessions:/app/sessions
+      - ./backend/media:/app/media
+    ports:
+      - "8001:8000"
+    expose:
+      - "8000"
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  node:
+    build:
+      context: .
+      dockerfile: node-server/Dockerfile
+    container_name: chat-collector-node
+    environment:
+      - BACKEND_URL=http://backend:8000
+      - PORT=3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge

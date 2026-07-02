@@ -1,0 +1,36 @@
+# ── Переменные окружения (содержат API ключи — НИКОГДА не заливать!) ──
+.env
+
+# ── Сессии Telethon (содержат авторизацию Telegram) ──
+backend/sessions/
+*.session
+
+# ── Медиафайлы и хранилище Viber ──
+backend/media/
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+
+# ── Node.js ──
+node_modules/
+npm-debug.log*
+
+# ── Docker ──
+.docker/
+
+# ── IDE ──
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store

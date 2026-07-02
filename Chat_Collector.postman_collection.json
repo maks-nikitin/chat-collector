@@ -1,0 +1,331 @@
+{
+  "info": {
+    "name": "Chat Collector API",
+    "description": "Коллекция запросов для тестирования Chat Collector — приложения для сбора сообщений из Telegram.\n\n**Порядок работы:**\n1. Запустите запросы из папки «Авторизация» по порядку\n2. Скопируйте phone_code_hash из ответа шага 1 в переменную коллекции\n3. После авторизации используйте запросы из папок «Чаты» и «Сообщения»",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8001",
+      "description": "Базовый URL бэкенда (порт 8001 пробрасывается из Docker)"
+    },
+    {
+      "key": "phone",
+      "value": "+79991234567",
+      "description": "Ваш номер телефона Telegram — замените на свой"
+    },
+    {
+      "key": "phone_code_hash",
+      "value": "",
+      "description": "Заполняется автоматически после шага 1 авторизации"
+    },
+    {
+      "key": "chat_id",
+      "value": "",
+      "description": "ID чата из ответа запроса «Список чатов» — скопируйте нужный"
+    }
+  ],
+  "item": [
+    {
+      "name": "Система",
+      "description": "Служебные эндпоинты для проверки работоспособности сервера",
+      "item": [
+        {
+          "name": "Проверка сервера (health check)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health",
+            "description": "Проверяет что бэкенд запущен и отвечает на запросы.\nДолжен вернуть {\"status\": \"ok\"}.\n\nИспользуется для мониторинга — если сервер упал, этот запрос вернёт ошибку."
+          },
+          "response": [
+            {
+              "name": "Успешный ответ",
+              "status": "OK",
+              "code": 200,
+              "body": "{\"status\": \"ok\"}"
+            }
+          ]
+        },
+        {
+          "name": "Swagger UI (документация)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/docs",
+            "description": "Открывает интерактивную документацию Swagger UI.\nВ браузере можно тестировать все эндпоинты без Postman."
+          }
+        },
+        {
+          "name": "ReDoc (альтернативная документация)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/redoc",
+            "description": "Альтернативный формат документации — более читаемый, удобен для просмотра схем запросов и ответов."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Авторизация Telegram",
+      "description": "Трёхшаговая авторизация через MTProto-протокол.\n\n**Шаг 1** → отправить код\n**Шаг 2** → подтвердить код\n**Шаг 3** → ввести пароль 2FA (только если включён)",
+      "item": [
+        {
+          "name": "Шаг 1 — Отправить код на телефон",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Автоматически сохраняем phone_code_hash в переменную коллекции",
+                  "// чтобы не копировать вручную",
+                  "var json = pm.response.json();",
+                  "if (json.phone_code_hash) {",
+                  "    pm.collectionVariables.set('phone_code_hash', json.phone_code_hash);",
+                  "    console.log('phone_code_hash сохранён:', json.phone_code_hash);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/telegram/auth/send_code",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{phone}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Telegram отправит код подтверждения на ваш телефон (в SMS или в приложение Telegram).\n\nПосле выполнения этого запроса:\n- В поле `phone_code_hash` ответа будет токен сессии\n- Скрипт в Tests автоматически сохранит его в переменную `{{phone_code_hash}}`\n- Этот токен нужно передать на шаге 2\n\n⚠️ Замените значение переменной `phone` на свой номер телефона в настройках коллекции."
+          }
+        },
+        {
+          "name": "Шаг 2 — Подтвердить код",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/telegram/auth/verify_code",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"code\": \"12345\",\n  \"phone_code_hash\": \"{{phone_code_hash}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Подтверждает код из Telegram.\n\n**Перед выполнением:** замените `12345` в теле запроса на реальный код из Telegram.\n\n**Возможные ответы:**\n- `{\"status\": \"ok\"}` — авторизация успешна, можно переходить к запросам чатов\n- `{\"status\": \"password_required\"}` — нужно выполнить шаг 3 (ввести пароль 2FA)\n\n`phone_code_hash` подставляется автоматически из переменной коллекции (сохранён на шаге 1)."
+          }
+        },
+        {
+          "name": "Шаг 3 — Ввести пароль 2FA (если нужен)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/telegram/auth/verify_password",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"password\": \"ваш_пароль_2fa\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Выполняется только если на шаге 2 пришёл ответ `password_required`.\n\nВведите облачный пароль, который вы установили в настройках Telegram → Конфиденциальность → Двухэтапная аутентификация.\n\nПосле успешного входа сессия сохраняется в файл `.session` — повторная авторизация при следующем запуске не потребуется."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Чаты Telegram",
+      "description": "Получение списка диалогов и управление подписками на чаты",
+      "item": [
+        {
+          "name": "Список всех чатов",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Выводим в консоль id и название первых 5 чатов для удобства",
+                  "var json = pm.response.json();",
+                  "if (json.chats && json.chats.length > 0) {",
+                  "    console.log('Найдено чатов:', json.chats.length);",
+                  "    json.chats.slice(0, 5).forEach(function(c) {",
+                  "        console.log(c.id, '—', c.name);",
+                  "    });",
+                  "    // Сохраняем id первого чата для удобства",
+                  "    pm.collectionVariables.set('chat_id', json.chats[0].id);",
+                  "    console.log('chat_id сохранён (первый чат):', json.chats[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/telegram/chats?phone={{phone}}&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "telegram", "chats"],
+              "query": [
+                {
+                  "key": "phone",
+                  "value": "{{phone}}",
+                  "description": "Номер телефона авторизованного пользователя"
+                },
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Максимальное количество чатов"
+                }
+              ]
+            },
+            "description": "Возвращает список всех диалогов: личные переписки, группы, супергруппы и каналы.\n\nИз ответа скопируйте `id` нужного чата и вставьте в переменную `chat_id` коллекции — он понадобится для запроса сообщений.\n\nСкрипт в Tests автоматически сохраняет id первого чата."
+          }
+        },
+        {
+          "name": "Вступить в чат по username",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/telegram/join",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"identifier\": \"@telegram\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Вступает в публичный канал или группу.\n\n**Форматы identifier:**\n- `@username` — по username\n- `https://t.me/username` — по ссылке\n- `https://t.me/+HASH` — приватная инвайт-ссылка\n\nПосле вступления чат появится в списке `/api/telegram/chats`.\n\nЗамените `@telegram` на нужный username."
+          }
+        },
+        {
+          "name": "Вступить в чат по инвайт-ссылке",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/telegram/join",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"identifier\": \"https://t.me/+ABC123XYZ\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Вступает в приватный чат по инвайт-ссылке вида `t.me/+HASH`.\n\nЗамените ссылку на реальную инвайт-ссылку."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Сообщения Telegram",
+      "description": "Загрузка истории сообщений и медиафайлов из чатов",
+      "item": [
+        {
+          "name": "Последние 30 сообщений из чата",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/telegram/messages?phone={{phone}}&chat_id={{chat_id}}&limit=30",
+              "host": ["{{base_url}}"],
+              "path": ["api", "telegram", "messages"],
+              "query": [
+                {
+                  "key": "phone",
+                  "value": "{{phone}}",
+                  "description": "Номер телефона"
+                },
+                {
+                  "key": "chat_id",
+                  "value": "{{chat_id}}",
+                  "description": "ID чата из запроса «Список чатов»"
+                },
+                {
+                  "key": "limit",
+                  "value": "30",
+                  "description": "Количество сообщений"
+                }
+              ]
+            },
+            "description": "Загружает последние 30 сообщений из чата.\n\n**Перед выполнением:** убедитесь что переменная `chat_id` заполнена (берётся из ответа запроса «Список чатов»).\n\nСообщения отсортированы от старых к новым. Если у сообщения есть фото, в поле `media_url` будет ссылка для загрузки."
+          }
+        },
+        {
+          "name": "Последние 100 сообщений из чата",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/telegram/messages?phone={{phone}}&chat_id={{chat_id}}&limit=100",
+              "host": ["{{base_url}}"],
+              "path": ["api", "telegram", "messages"],
+              "query": [
+                {
+                  "key": "phone",
+                  "value": "{{phone}}"
+                },
+                {
+                  "key": "chat_id",
+                  "value": "{{chat_id}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "100"
+                }
+              ]
+            },
+            "description": "То же самое что предыдущий запрос, но загружает 100 сообщений.\nМожно менять параметр limit от 1 до 500."
+          }
+        },
+        {
+          "name": "Получить медиафайл из сообщения",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/telegram/media/chat_dir/filename.jpg",
+              "host": ["{{base_url}}"],
+              "path": ["api", "telegram", "media", "chat_dir", "filename.jpg"]
+            },
+            "description": "Отдаёт изображение или другой медиафайл.\n\nПуть к файлу берётся из поля `media_url` в ответе запроса сообщений.\nНапример если `media_url` = `/api/telegram/media/n1234567890/999.jpg`,\nто URL запроса: `{{base_url}}/api/telegram/media/n1234567890/999.jpg`\n\nЗамените `chat_dir` и `filename.jpg` на реальные значения из media_url."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chat Collector — Telegram &amp; Viber</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<!-- ЭКРАН АВТОРИЗАЦИИ -->
+<div id="auth-screen" class="screen">
+  <div class="auth-box">
+    <h1>Подключение Telegram</h1>
+    <p class="hint">Вход выполняется через ваш собственный аккаунт Telegram (номер телефона + код подтверждения).</p>
+
+    <div id="auth-error" class="error-box" style="display:none;"></div>
+
+    <div id="step-phone" class="auth-step">
+      <label for="input-phone">Номер телефона</label>
+      <input type="text" id="input-phone" placeholder="+79991234567">
+      <button id="btn-send-code" class="btn-primary">Отправить код</button>
+    </div>
+
+    <div id="step-code" class="auth-step" style="display:none;">
+      <label for="input-code">Код из Telegram</label>
+      <input type="text" id="input-code" placeholder="12345">
+      <button id="btn-verify-code" class="btn-primary">Подтвердить код</button>
+    </div>
+
+    <div id="step-password" class="auth-step" style="display:none;">
+      <label for="input-password">Пароль двухфакторной аутентификации</label>
+      <input type="password" id="input-password" placeholder="Пароль 2FA">
+      <button id="btn-verify-password" class="btn-primary">Войти</button>
+    </div>
+  </div>
+</div>
+
+<!-- ОСНОВНОЙ ЭКРАН -->
+<div id="app-screen" class="screen" style="display:none;">
+  <header class="topbar">
+    <div class="topbar-title">Chat Collector</div>
+    <div class="tabs">
+      <button class="tab-btn active" data-service="telegram">Telegram</button>
+      <button class="tab-btn" data-service="viber">Viber</button>
+    </div>
+    <button id="btn-logout" class="btn-secondary">Выйти</button>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div id="join-box" class="join-box">
+        <input type="text" id="input-join" placeholder="@username, t.me/... или ссылка-приглашение">
+        <button id="btn-join" class="btn-secondary">Добавить чат</button>
+        <div id="join-status" class="join-status" style="display:none;"></div>
+      </div>
+      <div id="chat-list" class="chat-list"></div>
+    </aside>
+
+    <main class="main-panel">
+      <div class="limit-bar">
+        <label for="input-limit">Сообщений:</label>
+        <input type="number" id="input-limit" min="1" max="500" value="30">
+        <button id="btn-refresh" class="btn-secondary">Обновить</button>
+      </div>
+      <div id="message-list" class="message-list">
+        <div class="empty">Выберите чат слева</div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>
