@@ -51,3 +51,15 @@ class MessageOut(BaseModel):
     media_url: Optional[str] = Field(None, description="URL медиафайла если есть")
     media_type: Optional[str] = Field(None, description="Тип медиа: photo, image")
     is_outgoing: bool = Field(False, description="True если сообщение отправлено вами")
+
+class ViberImportRequest(BaseModel):
+    chat_id: str = Field(
+        ...,
+        description="Идентификатор чата/собеседника в Viber (пока можно любой уникальный текст, например номер телефона)",
+        examples=["+380991234567"],
+    )
+    chat_name: str = Field(..., description="Имя собеседника или название чата", examples=["Иван Иванов"])
+    sender: str = Field(..., description="Имя отправителя этого сообщения")
+    text: Optional[str] = Field(None, description="Текст сообщения")
+    is_outgoing: bool = Field(False, description="True если сообщение отправили вы, а не собеседник")
+    date: Optional[str] = Field(None, description="Дата и время ISO 8601. Если не передать — подставится текущее время сервера")

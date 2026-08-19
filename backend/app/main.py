@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,7 +7,14 @@ from fastapi.responses import FileResponse
 
 from app import telegram_service
 from app.config import settings
-from app.schemas import JoinChatRequest, SendCodeRequest, VerifyCodeRequest, VerifyPasswordRequest
+from app.schemas import (
+    JoinChatRequest,
+    SendCodeRequest,
+    VerifyCodeRequest,
+    VerifyPasswordRequest,
+    ViberImportRequest,
+)
+from app.storage import viber_storage
 
 app = FastAPI(
     title="Chat Collector API",
@@ -206,3 +214,51 @@ async def telegram_media(
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="Файл не найден")
     return FileResponse(filepath)
+
+# ---------------------------------------------------------------------------
+# Viber — тестовый приём данных 
+# ---------------------------------------------------------------------------
+
+@app.post(
+    "/api/viber/import",
+    tags=["Viber (тест)"],
+    summary="Временный приём сообщений Viber, скопированных вручную",
+)
+async def viber_import(body: ViberImportRequest):
+    """
+    Тестовый эндпоинт: принимает одно сообщение Viber и складывает его
+    в то же хранилище, которым пользуется официальный webhook (app/storage.py).
+    Позже коллега сделает свой приём — формат JSON можно оставить тем же.
+    """
+    viber_storage.upsert_chat(body.chat_id, body.chat_name)
+    viber_storage.add_message(
+        body.chat_id,
+        {
+            "id": str(int(datetime.utcnow().timestamp() * 1000)),
+            "sender": body.sender,
+            "text": body.text,
+            "date": body.date or datetime.utcnow().isoformat(),
+            "media_url": None,
+            "media_type": None,
+            "is_outgoing": body.is_outgoing,
+        },
+    )
+    return {"status": "ok"}
+
+
+@app.get(
+    "/api/viber/chats",
+    tags=["Viber (тест)"],
+    summary="Список собранных Viber-чатов",
+)
+async def viber_chats():
+    return {"chats": viber_storage.list_chats()}
+
+
+@app.get(
+    "/api/viber/messages",
+    tags=["Viber (тест)"],
+    summary="Сообщения конкретного Viber-чата",
+)
+async def viber_messages(chat_id: str = Query(..., description="chat_id, который отправляли в /api/viber/import")):
+    return {"messages": viber_storage.get_messages(chat_id)}
