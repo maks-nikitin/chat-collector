@@ -1,9 +1,11 @@
 import os
 from datetime import datetime
+from typing import Optional
+from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from app import telegram_service
 from app.config import settings
@@ -182,9 +184,13 @@ async def telegram_messages(
     Для каждого сообщения возвращается:
     - `id` — идентификатор сообщения
     - `sender` — имя отправителя
-    - `text` — текст сообщения (null если только медиа)
+    - `text` — текст сообщения или подпись к медиа (null если нет)
     - `date` — дата и время в формате ISO 8601
-    - `media_url` — ссылка на изображение (null если нет медиа)
+    - `media` — список вложений (фото, видео, gif, аудио, файлы, стикеры).
+      Фотографии одного альбома приходят одним сообщением с несколькими элементами
+    - `reply` — превью сообщения, на которое это сообщение отвечает (или null)
+    - `placeholder` — текстовая метка, если вложение показать нечем (опрос, геопозиция и т.п.)
+    - `ids` — id всех сообщений Telegram, вошедших в это сообщение (для альбомов их несколько)
     - `is_outgoing` — true если сообщение отправлено вами
 
     Сообщения отсортированы от старых к новым.
@@ -214,6 +220,95 @@ async def telegram_media(
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="Файл не найден")
     return FileResponse(filepath)
+
+@app.get(
+    "/api/telegram/raw_message",
+    tags=["Сообщения Telegram"],
+    summary="Диагностика: версия Telethon и сырое сообщение",
+)
+async def telegram_raw_message(
+    phone: str = Query(..., description="Номер телефона авторизованного пользователя"),
+    chat_id: str = Query(..., description="ID чата"),
+    message_id: int = Query(..., description="ID сообщения Telegram (поле ids из /messages)"),
+):
+    """Возвращает версию Telethon, номер слоя API и полное «сырое» описание сообщения.
+    Нужен, чтобы понять, почему вложение не распознаётся."""
+    try:
+        return await telegram_service.get_raw_message(phone, chat_id, message_id)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+def _range_response(request: Request, path: str, media_type: str, filename: str, download: bool):
+    """Отдаёт файл с поддержкой HTTP Range — без этого в <video> нельзя перематывать."""
+    size = os.path.getsize(path)
+    start, end, status = 0, size - 1, 200
+    headers = {"Accept-Ranges": "bytes"}
+
+    disposition = "attachment" if download else "inline"
+    headers["Content-Disposition"] = f"{disposition}; filename*=UTF-8''{quote(filename)}"
+
+    rng = request.headers.get("range")
+    if rng and rng.startswith("bytes="):
+        try:
+            s, e = rng[6:].split(",")[0].strip().split("-")
+            if s == "":
+                start = max(size - int(e), 0)
+            else:
+                start = int(s)
+                end = min(int(e), size - 1) if e else size - 1
+            if start > end or start >= size:
+                raise ValueError
+            status = 206
+            headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+        except ValueError:
+            return Response(status_code=416, headers={"Content-Range": f"bytes */{size}"})
+
+    length = end - start + 1
+    headers["Content-Length"] = str(length)
+
+    def iter_file():
+        with open(path, "rb") as f:
+            f.seek(start)
+            remaining = length
+            while remaining > 0:
+                chunk = f.read(min(65536, remaining))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+                yield chunk
+
+    return StreamingResponse(iter_file(), status_code=status, media_type=media_type, headers=headers)
+
+
+@app.get(
+    "/api/telegram/file",
+    tags=["Сообщения Telegram"],
+    summary="Скачать/воспроизвести тяжёлое вложение (видео, аудио, файл)",
+)
+async def telegram_file(
+    request: Request,
+    phone: str = Query(..., description="Номер телефона авторизованного пользователя"),
+    chat_id: str = Query(..., description="ID чата"),
+    message_id: int = Query(..., description="ID сообщения Telegram с вложением"),
+    download: bool = Query(False, description="true — отдать как скачиваемый файл"),
+    doc_id: Optional[int] = Query(None, description="ID документа внутри «богатого» поста (rich_message)"),
+):
+    """
+    Видео, аудио и документы не скачиваются при загрузке списка сообщений —
+    они подтягиваются из Telegram при первом обращении к этому эндпоинту
+    и кэшируются в `/app/media/telegram/`. Поддерживается HTTP Range (перемотка видео).
+    """
+    try:
+        path, mime, filename = await telegram_service.ensure_media_file(phone, chat_id, message_id, doc_id)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return _range_response(request, path, mime, filename, download)
+
 
 # ---------------------------------------------------------------------------
 # Viber — тестовый приём данных 
