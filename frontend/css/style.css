@@ -314,3 +314,7 @@ body {
 .rich-code { margin: 0; padding: 8px; background: #f3f4f6; border-radius: 6px; font-size: 12px; overflow-x: auto; }
 .rich-list { margin: 0; padding-left: 22px; font-size: 14px; }
 .rich-divider { border: 0; border-top: 1px solid #e5e7eb; margin: 8px 0; }
+
+/* Пересланное сообщение */
+.message-forward { font-size: 12px; color: #2563eb; margin: 0 0 4px; }
+.message-forward .forward-name { font-weight: 700; }

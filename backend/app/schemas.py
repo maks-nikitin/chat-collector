@@ -61,6 +61,11 @@ class ReplyOut(BaseModel):
     label: Optional[str] = Field(None, description="Метка вложения, если у исходного сообщения нет текста")
 
 
+class ForwardOut(BaseModel):
+    name: str = Field(..., description="Источник пересланного сообщения (автор, канал или чат)")
+    date: Optional[str] = Field(None, description="Дата оригинального сообщения (ISO 8601)")
+
+
 class MessageOut(BaseModel):
     id: str = Field(..., description="Идентификатор сообщения (для альбома — самого раннего сообщения)")
     ids: list[str] = Field(default_factory=list, description="Все id сообщений Telegram, вошедших в это сообщение")
@@ -77,6 +82,7 @@ class MessageOut(BaseModel):
     media_type: Optional[str] = Field(None, description="Тип первого вложения (для обратной совместимости)")
     placeholder: Optional[str] = Field(None, description="Метка, если вложение показать нечем")
     reply: Optional[ReplyOut] = Field(None, description="Превью сообщения, на которое это — ответ")
+    forward: Optional[ForwardOut] = Field(None, description="Источник, если сообщение переслано (иначе null)")
     is_outgoing: bool = Field(False, description="True если сообщение отправлено вами")
 
 

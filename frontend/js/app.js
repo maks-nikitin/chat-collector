@@ -503,6 +503,13 @@ $(function () {
       $msg.attr('data-ids', (m.ids && m.ids.length ? m.ids : [m.id]).join(' '));
 
       $msg.append($('<div class="message-sender"></div>').text(m.sender || ''));
+      if (m.forward) {
+        $msg.append(
+          $('<div class="message-forward"></div>')
+            .append('<span class="forward-label">Переслано от </span>')
+            .append($('<span class="forward-name"></span>').text(m.forward.name))
+        );
+      }
       if (m.reply) $msg.append(renderReply(m.reply));
       const hasRich = !!(m.rich && m.rich.length);
       if (hasRich) {

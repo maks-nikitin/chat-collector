@@ -405,6 +405,35 @@ async def _sender_name(m, cache: dict) -> str:
     return name
 
 
+async def _forward_info(m, cache: dict) -> Optional[dict]:
+    """Откуда переслано сообщение: {"name": ..., "date": ...} или None, если не пересылка."""
+    hdr = getattr(m, "fwd_from", None)
+    if hdr is None:
+        return None
+    date = getattr(hdr, "date", None)
+    # from_name заполнен, когда автор скрыл аккаунт в настройках приватности
+    name = getattr(hdr, "from_name", None)
+    if not name:
+        peer = getattr(hdr, "from_id", None)
+        key = f"fwd:{peer!r}" if peer is not None else None
+        if key and key in cache:
+            name = cache[key]
+        else:
+            fwd = getattr(m, "forward", None)
+            try:
+                entity = await fwd.get_sender() if fwd else None
+                if entity is None and fwd:
+                    entity = await fwd.get_chat()  # пересылка поста из канала/чата
+                if entity is not None:
+                    name = _entity_name(entity)
+            except Exception:
+                pass
+            name = name or getattr(hdr, "post_author", None)
+            if key and name:
+                cache[key] = name
+    return {"name": name or "Неизвестный источник", "date": date.isoformat() if date else None}
+
+
 def _reply_target_id(m) -> Optional[int]:
     """id сообщения, на которое это сообщение отвечает (или None).
     В форумах (темах) у обычных сообщений reply_to указывает на корень темы —
@@ -428,6 +457,7 @@ async def _process_message(client, m, phone, chat_id, chat_dir, media_dir, name_
         "sender": await _sender_name(m, name_cache),
         "text": _message_text(m) or None,
         "rich": rich_blocks or None,
+        "forward": await _forward_info(m, name_cache),
         "date": m.date.isoformat() if m.date else "",
         "is_outgoing": bool(m.out),
         "media": media,
@@ -512,6 +542,7 @@ async def get_messages(phone: str, chat_id: str, limit: int = 30) -> list:
             it["label"] = it["label"] or p["label"]
             it["reply_id"] = it["reply_id"] or p["reply_id"]
             it["rich"] = it["rich"] or p["rich"]
+            it["forward"] = it["forward"] or p["forward"]
             continue
         it = {
             "id": p["id"],
@@ -519,6 +550,7 @@ async def get_messages(phone: str, chat_id: str, limit: int = 30) -> list:
             "sender": p["sender"],
             "text": p["text"],
             "rich": p["rich"],
+            "forward": p["forward"],
             "date": p["date"],
             "is_outgoing": p["is_outgoing"],
             "media": [p["media"]] if p["media"] else [],
@@ -547,6 +579,7 @@ async def get_messages(phone: str, chat_id: str, limit: int = 30) -> list:
                 "sender": it["sender"],
                 "text": it["text"],
                 "rich": it["rich"],
+                "forward": it["forward"],
                 "date": it["date"],
                 "is_outgoing": it["is_outgoing"],
                 "media": it["media"],
